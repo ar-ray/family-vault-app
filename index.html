@@ -933,6 +933,7 @@
             <div class="gap-16">
               <button class="btn btn-secondary w-full" onclick="exportData()">📤 Export Data (JSON)</button>
               <button class="btn btn-danger w-full" onclick="confirmClearData()">🗑️ Clear All Data</button>
+              <button class="btn btn-danger w-full" onclick="resetEverything()">💥 Reset Cloud + Local (force)</button>
             </div>
           </div>
         </div>
@@ -2148,6 +2149,51 @@ function exportData() {
   a.href = URL.createObjectURL(blob);
   a.download = `familyvault-export-${new Date().toISOString().split('T')[0]}.json`;
   a.click();
+}
+
+// Force a clean slate: empty state pushed straight to GitHub, bypassing the merge
+async function resetEverything() {
+  if(!confirm('⚠️ This wipes ALL data on this device AND in the cloud. Every synced device will be cleared on its next sync. Continue?')) return;
+  if(!confirm('Last chance — every expense, budget, goal, and recurring item will be permanently deleted everywhere.')) return;
+
+  state.expenses   = [];
+  state.recurring  = [];
+  state.goals      = [];
+  state.budget     = {};
+  state.piggy      = { amount:0, goal:'', target:0 };
+  state.deletedIds = [];
+  state.settings._syncedAt = new Date().toISOString();
+  saveLocal();
+
+  if(ghApiUrl() && ghConfig.pat) {
+    setSyncBadge('syncing', 'Resetting cloud…');
+    try {
+      const url = ghApiUrl();
+      const head = await fetch(url, { headers: ghHeaders() });
+      const sha = head.ok ? (await head.json()).sha : null;
+      const body = {
+        message: `FamilyVault hard reset ${state.settings._syncedAt}`,
+        content: toB64(buildPayload()),
+        ...(sha ? { sha } : {}),
+      };
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: ghHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(body),
+      });
+      if(!res.ok) throw new Error(`GitHub ${res.status}`);
+      const json = await res.json();
+      ghFileSha = json.content.sha;
+      ghEtag = null;
+      setSyncBadge('synced', 'Reset complete');
+    } catch(e) {
+      setSyncBadge('error', 'Cloud reset failed');
+      alert('Could not reset cloud — check your PAT and connection.');
+      return;
+    }
+  }
+  alert('Reset complete. Reloading with a clean slate.');
+  setTimeout(() => location.reload(), 600);
 }
 
 function confirmClearData() {
