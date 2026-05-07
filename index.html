@@ -2151,9 +2151,12 @@ function exportData() {
 }
 
 function confirmClearData() {
-  if(!confirm('⚠️ This will delete ALL your data. This cannot be undone. Are you sure?')) return;
-  if(!confirm('Really? All expenses, goals and budgets will be lost.')) return;
+  if(!confirm('⚠️ This will delete ALL your local data. If GitHub Sync is on, it will then push the empty state and wipe the cloud copy too. Continue?')) return;
+  if(!confirm('Really? All expenses, goals and budgets will be lost on every synced device.')) return;
+  // Preserve GitHub sync config so the empty state syncs cleanly to the remote
+  const ghCfg = localStorage.getItem(GH_KEY);
   localStorage.clear();
+  if(ghCfg) localStorage.setItem(GH_KEY, ghCfg);
   location.reload();
 }
 
