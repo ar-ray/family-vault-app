@@ -2295,14 +2295,16 @@ function mergeRemoteState(remote) {
 }
 
 // Fetch current remote file (returns parsed JSON or null)
+let ghFetchedOk = false;
 async function ghFetchRaw() {
   const url = ghApiUrl();
   const res = await fetch(url, { headers: ghHeaders() });
-  if(res.status === 404) return { notFound: true };
+  if(res.status === 404) { ghFetchedOk = true; return { notFound: true }; }
   if(!res.ok) throw new Error(`GitHub ${res.status}`);
   ghEtag = res.headers.get('ETag');
   const json = await res.json();
   ghFileSha = json.sha;
+  ghFetchedOk = true;
   return JSON.parse(fromB64(json.content));
 }
 
@@ -2439,7 +2441,9 @@ async function init() {
   await githubFetch();
   ghInitialized = true;
 
-  seedData();
+  // Only seed sample data when GitHub sync is NOT in use — once a user has
+  // their own data.json (even an empty one), they want their real data, not demos
+  if(!ghFetchedOk) seedData();
   populateCatSelects();
   applyRecurringToday();
   updatePersonLabels();
