@@ -1266,62 +1266,9 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sub
 function getCat(id) { return CATEGORIES.find(c=>c.id===id) || CATEGORIES[CATEGORIES.length-1]; }
 
 // ============================================================
-// SEED SAMPLE DATA
+// SEED SAMPLE DATA — disabled: app starts with a blank slate
 // ============================================================
-function seedData() {
-  if(state.expenses.length > 0) return; // already has data
-  const today = new Date();
-  const y = today.getFullYear(), m = today.getMonth();
-  const d = (day) => {
-    const dt = new Date(y, m, day);
-    return dt.toISOString().split('T')[0];
-  };
-
-  state.expenses = [
-    { id:uid(), amount:124.50, cat:'groceries', person:'person1', date:d(1), note:'Weekly shop' },
-    { id:uid(), amount:42.00, cat:'dining', person:'shared', date:d(2), note:'Pizza night' },
-    { id:uid(), amount:6.50, cat:'coffee', person:'person1', date:d(3), note:'Morning latte' },
-    { id:uid(), amount:35.00, cat:'transport', person:'person2', date:d(3), note:'Fuel' },
-    { id:uid(), amount:89.00, cat:'health', person:'shared', date:d(4), note:'Pharmacy' },
-    { id:uid(), amount:22.00, cat:'kids', person:'person2', date:d(5), note:'School supplies' },
-    { id:uid(), amount:15.99, cat:'entertainment', person:'shared', date:d(7), note:'Movie night' },
-    { id:uid(), amount:67.30, cat:'groceries', person:'person1', date:d(8), note:'Midweek top-up' },
-    { id:uid(), amount:9.99, cat:'coffee', person:'person2', date:d(9), note:'Café work session' },
-    { id:uid(), amount:55.00, cat:'shopping', person:'person1', date:d(10), note:'Clothes' },
-    { id:uid(), amount:130.00, cat:'groceries', person:'shared', date:d(14), note:'Big weekly shop' },
-    { id:uid(), amount:38.00, cat:'dining', person:'shared', date:d(15), note:'Date night' },
-    { id:uid(), amount:12.50, cat:'transport', person:'person1', date:d(16), note:'Parking' },
-    { id:uid(), amount:45.00, cat:'kids', person:'shared', date:d(17), note:'Activity class' },
-    { id:uid(), amount:8.00, cat:'coffee', person:'person1', date:d(18), note:'Coffee & muffin' },
-  ];
-
-  state.recurring = [
-    { id:uid(), name:'Rent / Mortgage', amount:1500, day:1, cat:'home', person:'shared', note:'Auto-pay', active:true },
-    { id:uid(), name:'Netflix', amount:15.99, day:8, cat:'subscriptions', person:'shared', note:'', active:true },
-    { id:uid(), name:'Spotify Family', amount:14.99, day:10, cat:'subscriptions', person:'shared', note:'', active:true },
-    { id:uid(), name:'Electric Bill', amount:120, day:15, cat:'utilities', person:'shared', note:'Varies ±$20', active:true },
-    { id:uid(), name:'Internet', amount:75, day:20, cat:'utilities', person:'shared', note:'', active:true },
-    { id:uid(), name:'Gym Membership', amount:49, day:1, cat:'health', person:'person1', note:'', active:true },
-  ];
-
-  state.goals = [
-    { id:uid(), name:'Family Vacation', icon:'✈️', target:3000, saved:850, date: new Date(y, m+4, 1).toISOString().split('T')[0] },
-    { id:uid(), name:'Emergency Fund', icon:'🛡️', target:10000, saved:4200, date:'' },
-    { id:uid(), name:'New Car', icon:'🚗', target:20000, saved:3000, date:'' },
-  ];
-
-  state.budget = {
-    income: 5000,
-    limits: {
-      groceries:600, dining:200, coffee:50, transport:200, kids:300,
-      health:150, entertainment:100, shopping:150, home:1600, subscriptions:80,
-      education:100, utilities:200, other:100,
-    }
-  };
-
-  state.piggy = { amount:45, goal:'New Bicycle', target:200 };
-  save();
-}
+function seedData() { /* intentionally empty */ }
 
 // ============================================================
 // NAVIGATION
