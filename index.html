@@ -2163,6 +2163,10 @@ async function resetEverything() {
   state.piggy      = { amount:0, goal:'', target:0 };
   state.deletedIds = [];
   state.settings._syncedAt = new Date().toISOString();
+  // Bump the reset epoch — every other synced device will see this as a new
+  // value on next fetch/poll and hard-reset its local state to match.
+  const newEpoch = Date.now();
+  localStorage.setItem('fv_resetEpoch', String(newEpoch));
   saveLocal();
 
   if(ghApiUrl() && ghConfig.pat) {
@@ -2173,7 +2177,7 @@ async function resetEverything() {
       const sha = head.ok ? (await head.json()).sha : null;
       const body = {
         message: `FamilyVault hard reset ${state.settings._syncedAt}`,
-        content: toB64(buildPayload()),
+        content: toB64(buildPayload()), // includes the new resetEpoch
         ...(sha ? { sha } : {}),
       };
       const res = await fetch(url, {
@@ -2297,8 +2301,34 @@ function buildPayload() {
     piggy:      state.piggy,
     settings:   state.settings,
     deletedIds: state.deletedIds,
+    resetEpoch: parseInt(localStorage.getItem('fv_resetEpoch') || '0', 10),
     syncedAt:   new Date().toISOString(),
   });
+}
+
+// Decide whether to merge or hard-reset against remote.
+// When resetEpoch differs, the cloud is authoritative — replace local state.
+// This is the only way to propagate a deliberate "wipe everything" across devices,
+// since otherwise local items with no tombstones would survive merge and be re-pushed.
+function applyRemote(remote) {
+  const localEpoch  = parseInt(localStorage.getItem('fv_resetEpoch') || '0', 10);
+  const remoteEpoch = Number(remote.resetEpoch) || 0;
+
+  if(remoteEpoch !== localEpoch) {
+    state.expenses   = Array.isArray(remote.expenses)   ? remote.expenses   : [];
+    state.recurring  = Array.isArray(remote.recurring)  ? remote.recurring  : [];
+    state.goals      = Array.isArray(remote.goals)      ? remote.goals      : [];
+    state.budget     = remote.budget     || {};
+    state.piggy      = remote.piggy      || { amount:0, goal:'', target:0 };
+    state.deletedIds = Array.isArray(remote.deletedIds) ? remote.deletedIds : [];
+    if(remote.settings) {
+      const darkMode = state.settings.darkMode;
+      state.settings = { ...remote.settings, darkMode, _syncedAt: remote.syncedAt };
+    }
+    localStorage.setItem('fv_resetEpoch', String(remoteEpoch));
+  } else {
+    mergeRemoteState(remote);
+  }
 }
 
 // Merge remote array into local by ID.
@@ -2365,7 +2395,7 @@ async function githubFetch() {
   try {
     const remote = await ghFetchRaw();
     if(remote.notFound) { setSyncBadge('synced', 'Ready (new)'); return; }
-    mergeRemoteState(remote);
+    applyRemote(remote);
     saveLocal();
     const ts = new Date(remote.syncedAt || Date.now()).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
     setSyncBadge('synced', `Synced ${ts}`);
@@ -2382,10 +2412,10 @@ async function githubPush() {
   setSyncBadge('syncing');
 
   try {
-    // 1. Pull latest remote and merge any concurrent edits
+    // 1. Pull latest remote — merge concurrent edits OR adopt a deliberate reset
     const remote = await ghFetchRaw();
     if(!remote.notFound) {
-      mergeRemoteState(remote);
+      applyRemote(remote);
       saveLocal();
     }
 
@@ -2436,7 +2466,7 @@ async function pollForChanges() {
     ghEtag    = newEtag;
     ghFileSha = json.sha;
     const remote = JSON.parse(fromB64(json.content));
-    mergeRemoteState(remote);
+    applyRemote(remote);
     saveLocal();
     refreshAll();
     updatePersonLabels();
