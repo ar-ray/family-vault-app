@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>FamilyVault — Family Finance</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -27,7 +27,7 @@
     --border:#2a3838;
   }
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'DM Sans',sans-serif; background:var(--cream); color:var(--text-dark); min-height:100vh; transition:background 0.3s,color 0.3s; }
+  body { font-family:'DM Sans',sans-serif; background:var(--cream); color:var(--text-dark); min-height:100vh; transition:background 0.3s,color 0.3s; overscroll-behavior-x:none; }
   body::before { content:''; position:fixed; inset:0; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E"); pointer-events:none; z-index:0; opacity:0.5; }
 
   .app-wrapper { display:flex; min-height:100vh; position:relative; z-index:1; }
@@ -219,10 +219,17 @@
   .impulse-popup { position:fixed; bottom:100px; right:24px; max-width:300px; background:var(--card-bg); border-radius:var(--radius); padding:20px; box-shadow:0 8px 40px rgba(0,0,0,0.15); border:1px solid var(--border); z-index:400; display:none; animation:toastIn 0.3s ease; }
 
   .mobile-nav { display:none; position:fixed; bottom:0; left:0; right:0; background:var(--card-bg); border-top:1px solid var(--border); z-index:300; padding:6px 0 env(safe-area-inset-bottom,6px); }
-  .mobile-nav-inner { display:flex; overflow-x:auto; -webkit-overflow-scrolling:touch; }
-  .mobile-nav-item { display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 10px; cursor:pointer; border:none; background:none; color:var(--text-light); font-family:'DM Sans',sans-serif; font-size:0.64rem; font-weight:600; min-width:60px; flex-shrink:0; }
+  /* Contain swipe gestures inside the nav: pan-x = only horizontal panning here,
+     overscroll containment stops the gesture chaining into browser back/forward */
+  .mobile-nav-inner { display:flex; overflow-x:auto; -webkit-overflow-scrolling:touch; touch-action:pan-x; overscroll-behavior-x:contain; scroll-snap-type:x proximity; scrollbar-width:none; -ms-overflow-style:none; padding:0 18px; scroll-padding:0 18px; }
+  .mobile-nav-inner::-webkit-scrollbar { display:none; }
+  .mobile-nav-item { display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 10px; cursor:pointer; border:none; background:none; color:var(--text-light); font-family:'DM Sans',sans-serif; font-size:0.64rem; font-weight:600; min-width:60px; flex-shrink:0; scroll-snap-align:center; -webkit-tap-highlight-color:transparent; touch-action:pan-x; }
   .mobile-nav-item .mn-icon { font-size:1.2rem; }
   .mobile-nav-item.active { color:var(--teal); }
+  /* Edge fades: visual cue that the menu slides */
+  .mobile-nav::before, .mobile-nav::after { content:''; position:absolute; top:1px; bottom:0; width:22px; pointer-events:none; z-index:2; }
+  .mobile-nav::before { left:0; background:linear-gradient(to right, var(--card-bg), transparent); }
+  .mobile-nav::after { right:0; background:linear-gradient(to left, var(--card-bg), transparent); }
 
   .confetti-piece { position:fixed; width:10px; height:10px; border-radius:2px; animation:confettiFall 2s ease-out forwards; pointer-events:none; z-index:9999; }
   @keyframes confettiFall { 0%{transform:translateY(-10px) rotate(0);opacity:1;} 100%{transform:translateY(100vh) rotate(720deg);opacity:0;} }
@@ -1345,6 +1352,9 @@ function navigate(section) {
   const sec = document.getElementById("section-"+section);
   if(sec) sec.classList.add("active");
   document.querySelectorAll('[data-section="'+section+'"]').forEach(b=>b.classList.add("active"));
+  // Keep the active tab centered in the slidable bottom nav
+  const mob = document.querySelector('.mobile-nav-item[data-section="'+section+'"]');
+  if(mob && mob.scrollIntoView) { try { mob.scrollIntoView({ inline:"center", block:"nearest", behavior:"smooth" }); } catch(e) {} }
   renderSection(section);
 }
 function renderSection(section) {
