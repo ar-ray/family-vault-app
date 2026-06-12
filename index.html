@@ -721,6 +721,7 @@
             <div class="form-group"><label class="form-label">Personal Access Token</label><input type="password" class="form-control" id="ghPat" placeholder="ghp_…" autocomplete="off" spellcheck="false"></div>
             <div class="form-group"><label class="form-label">File Path</label><input type="text" class="form-control" id="ghFilePath" placeholder="data.json" autocomplete="off" spellcheck="false"></div>
             <button class="btn btn-primary w-full mb-12" onclick="saveGithubSettings()">🔗 Connect & Sync</button>
+            <button class="btn btn-secondary w-full mb-12" onclick="copyFamilyCode()">📋 Copy Family Code (log in your other devices)</button>
             <div class="flex gap-8">
               <button class="btn btn-secondary w-full" onclick="syncNow()">⟳ Sync Now</button>
               <button class="btn btn-secondary w-full" onclick="disconnectSync()">Disconnect</button>
@@ -964,8 +965,26 @@
   <div class="modal" style="max-width:440px">
     <div class="wizard-dots"><div class="wizard-dot active" id="wd1"></div><div class="wizard-dot" id="wd2"></div><div class="wizard-dot" id="wd3"></div></div>
 
-    <div class="wizard-step active" id="wstep1">
+    <div class="wizard-step active" id="wstep0">
       <div class="modal-title mb-12">👋 Welcome to FamilyVault!</div>
+      <p class="text-sm text-mid mb-16">One family, one vault — synced live across everyone's devices.</p>
+      <div class="wizard-choice selected" id="wizModeNew" onclick="wizardMode('new')">
+        <strong>🆕 Set up a new family</strong>
+        <span>This is your family's first device — create your vault from scratch.</span>
+      </div>
+      <div class="wizard-choice" id="wizModeJoin" onclick="wizardMode('join')">
+        <strong>🔗 Join your family</strong>
+        <span>Already set up on another device? Paste your Family Code and everything loads instantly.</span>
+      </div>
+      <div id="wizJoinBox" style="display:none">
+        <div class="form-group mt-12"><label class="form-label">Family Code</label><textarea class="form-control" id="wizFamilyCode" rows="3" placeholder="FV1.…" spellcheck="false" autocomplete="off" style="font-family:monospace;font-size:0.78rem;resize:vertical"></textarea></div>
+        <p class="text-xs text-light mb-12">On the device that's already set up: Settings → ☁️ Cloud Sync → 📋 Copy Family Code.</p>
+      </div>
+      <button class="btn btn-primary w-full mt-12" id="wizStep0Btn" onclick="wizardStep0Next()">Next →</button>
+    </div>
+
+    <div class="wizard-step" id="wstep1">
+      <div class="modal-title mb-12">👨‍👩‍👧 Who's in the family?</div>
       <p class="text-sm text-mid mb-16">Let us set things up for your family in under a minute.</p>
       <div class="form-group"><label class="form-label">Your name</label><input type="text" class="form-control" id="wizP1" placeholder="e.g. Alex"></div>
       <div class="form-group"><label class="form-label">Partner's name</label><input type="text" class="form-control" id="wizP2" placeholder="e.g. Jordan"></div>
@@ -973,7 +992,10 @@
         <div class="form-group"><label class="form-label">Kid's name</label><input type="text" class="form-control" id="wizKid" placeholder="e.g. Lily"></div>
         <div class="form-group"><label class="form-label">Currency</label><input type="text" class="form-control" id="wizCurrency" value="$" maxlength="3"></div>
       </div>
-      <button class="btn btn-primary w-full" onclick="wizardNext(2)">Next →</button>
+      <div class="flex gap-8">
+        <button class="btn btn-secondary" style="flex:1" onclick="wizardNext(0)">← Back</button>
+        <button class="btn btn-primary" style="flex:2" onclick="wizardNext(2)">Next →</button>
+      </div>
     </div>
 
     <div class="wizard-step" id="wstep2">
@@ -2607,10 +2629,58 @@ function checkNudges() {
 // ONBOARDING WIZARD
 // ============================================================
 let wizChoice = "demo";
+let wizMode = "new";
 function wizardNext(step) {
-  for(let i=1;i<=3;i++) {
-    document.getElementById("wstep"+i).classList.toggle("active", i===step);
-    document.getElementById("wd"+i).classList.toggle("active", i===step);
+  for(let i=0;i<=3;i++) {
+    const s = document.getElementById("wstep"+i); if(s) s.classList.toggle("active", i===step);
+    const d = document.getElementById("wd"+i);    if(d) d.classList.toggle("active", i===step || (step===0 && i===1));
+  }
+}
+function wizardMode(mode) {
+  wizMode = mode;
+  document.getElementById("wizModeNew").classList.toggle("selected", mode==="new");
+  document.getElementById("wizModeJoin").classList.toggle("selected", mode==="join");
+  document.getElementById("wizJoinBox").style.display = mode==="join" ? "block" : "none";
+  document.getElementById("wizStep0Btn").textContent = mode==="join" ? "🔗 Connect & Load" : "Next →";
+}
+function wizardStep0Next() {
+  if(wizMode==="join") joinFamily();
+  else wizardNext(1);
+}
+async function joinFamily() {
+  const code = document.getElementById("wizFamilyCode").value.trim();
+  const cfg = parseFamilyCode(code);
+  if(!cfg) { toast("That code doesn't look right — copy it again from your other device."); return; }
+  const btn = document.getElementById("wizStep0Btn");
+  btn.disabled = true; btn.textContent = "Connecting…";
+  ghConfig = cfg; saveGhConfig(); ghInitialized = true;
+  try {
+    const remote = await ghFetchRaw();
+    if(remote.notFound) {
+      // Repo reachable but no data file yet — stay connected, finish setup manually
+      ghRemoteExists = false;
+      loadGithubSettings(); setSyncBadge("synced", "Ready (new)");
+      toast("Connected! No family data in the cloud yet — let's finish setup here.");
+      wizardNext(1);
+      return;
+    }
+    ghRemoteExists = true;
+    localStorage.setItem("fv_resetEpoch", "-1"); // force epoch mismatch → adopt cloud wholesale
+    applyRemote(remote);
+    state.settings.onboarded = true;
+    saveLocal();
+    loadGithubSettings();
+    closeModal("wizardModal");
+    populateCatSelects(); updatePersonLabels(); loadSettings(); applyRecurring(); refreshAll(); renderDashboard();
+    setSyncBadge("synced", "Connected");
+    confetti();
+    toast("Welcome! Your family's data is loaded and live-syncing. ☁️✅");
+  } catch(e) {
+    ghConfig = {}; localStorage.removeItem(GH_KEY);
+    toast("Could not connect — check the code and your internet, then try again.");
+  } finally {
+    btn.disabled = false;
+    if(wizMode==="join") btn.textContent = "🔗 Connect & Load";
   }
 }
 function wizardChoose(choice) {
@@ -2645,8 +2715,8 @@ function finishWizard() {
 // GITHUB CLOUD SYNC
 // ============================================================
 const GH_KEY = "fv_github";
-const SYNC_DEBOUNCE_MS = 1200;
-const POLL_INTERVAL_MS = 30000; // 30s poll for cross-device updates
+const SYNC_DEBOUNCE_MS = 800;
+const POLL_INTERVAL_MS = 15000; // 15s poll for cross-device updates
 
 let ghConfig = (() => { try { return JSON.parse(localStorage.getItem(GH_KEY)) || {}; } catch { return {}; } })();
 let ghFileSha = null;
@@ -2684,6 +2754,32 @@ function setSyncBadge(status, msg) {
 
 function toB64(str)  { return btoa(unescape(encodeURIComponent(str))); }
 function fromB64(b64){ return decodeURIComponent(escape(atob(b64.replace(/\n/g,"")))); }
+
+// ---- Family Code: one shareable string = instant login on any device ------
+function buildFamilyCode() {
+  const { username, repo, pat, filePath } = ghConfig;
+  if(!username || !repo || !pat) return null;
+  return "FV1." + toB64(JSON.stringify({ u:username, r:repo, t:pat, f:filePath || "data.json" }));
+}
+function parseFamilyCode(code) {
+  try {
+    code = String(code || "").replace(/\s+/g, "");
+    if(!code.startsWith("FV1.")) return null;
+    const o = JSON.parse(fromB64(code.slice(4)));
+    if(!o.u || !o.r || !o.t) return null;
+    return { username:o.u, repo:o.r, pat:o.t, filePath:o.f || "data.json" };
+  } catch { return null; }
+}
+async function copyFamilyCode() {
+  const code = buildFamilyCode();
+  if(!code) { toast("Connect cloud sync first — then you can share your Family Code."); return; }
+  try {
+    await navigator.clipboard.writeText(code);
+    toast("Family Code copied! Paste it on your other device's welcome screen. 📋");
+  } catch {
+    prompt("Copy your Family Code:", code);
+  }
+}
 
 function buildPayload() {
   return JSON.stringify({
@@ -2838,11 +2934,13 @@ async function pollForChanges() {
   } catch {}
 }
 
+let pushQueued = false;
 function scheduleSync() {
   if(!ghInitialized || !ghApiUrl() || !ghConfig.pat) return;
   clearTimeout(syncDebounceTimer);
   setSyncBadge("syncing");
-  syncDebounceTimer = setTimeout(githubPush, SYNC_DEBOUNCE_MS);
+  pushQueued = true;
+  syncDebounceTimer = setTimeout(() => { pushQueued = false; githubPush(); }, SYNC_DEBOUNCE_MS);
 }
 
 async function syncNow() {
@@ -2918,6 +3016,19 @@ async function resetEverything() {
 window.addEventListener("online",  () => { if(pendingSync) { pendingSync=false; githubPush(); } else setSyncBadge(ghApiUrl()&&ghConfig.pat?"synced":""); });
 window.addEventListener("offline", () => { setSyncBadge("offline"); pendingSync = true; });
 
+// Mobile-friendly instant sync: pull the moment the app comes back into view,
+// and flush any queued push immediately when the user switches away.
+document.addEventListener("visibilitychange", () => {
+  if(document.visibilityState === "visible") {
+    pollForChanges();
+  } else if(pushQueued) {
+    clearTimeout(syncDebounceTimer);
+    pushQueued = false;
+    githubPush();
+  }
+});
+window.addEventListener("focus", () => pollForChanges());
+
 // ============================================================
 // INIT
 // ============================================================
@@ -2933,7 +3044,7 @@ async function init() {
   // Pull cloud data (if configured) before deciding to onboard/seed
   await githubFetch();
   ghInitialized = true;
-  if(ghRemoteExists) state.settings.onboarded = true; // existing cloud data → skip wizard
+  if(ghRemoteExists && !state.settings.onboarded) { state.settings.onboarded = true; saveLocal(); } // existing cloud data → skip wizard
   if(state.settings.darkMode) document.documentElement.setAttribute("data-theme","dark");
 
   updatePersonLabels();
